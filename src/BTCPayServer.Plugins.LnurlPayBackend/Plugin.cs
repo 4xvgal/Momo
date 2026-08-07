@@ -2,7 +2,7 @@
 using BTCPayServer.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace BTCPayServer.Plugins.Template;
+namespace BTCPayServer.Plugins.LnurlPayBackend;
 
 public class Plugin : BaseBTCPayServerPlugin
 {

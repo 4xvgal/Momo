@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BTCPayServer.Plugins.Template\BTCPayServer.Plugins.Template.csproj" />
+    <ProjectReference Include="..\..\src\BTCPayServer.Plugins.LnurlPayBackend\BTCPayServer.Plugins.LnurlPayBackend.csproj" />
     <ProjectReference Include="..\..\submodules\btcpayserver\BTCPayServer.Tests\BTCPayServer.Tests.csproj" />
   </ItemGroup>
 

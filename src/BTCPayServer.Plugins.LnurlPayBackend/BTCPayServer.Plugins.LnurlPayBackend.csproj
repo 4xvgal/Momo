@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Product>LNURL-pay Backend</Product>
     <Description>Use a Lightning Address (LUD-06/16) as a virtual Lightning backend for BTCPay Server.</Description>
-    <Version>0.2.0</Version>
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <!-- Plugin development properties -->
@@ -25,19 +25,17 @@
   </ItemDefinitionGroup>
 
 
-    <!-- If you need Entity Framework, you can uncomment this. This will make it usable in your project without publishing assemblies
-  already referenced by BTCPay Server Core project -->
-  <!--
+  <!-- EF Core: Design for migrations, Npgsql for PostgreSQL.
+       CodeAnalysis.Common/CSharp pinned to avoid transitive version conflict in EF Design 10.0.4. -->
   <ItemGroup Condition="$(Configuration) != 'Release'">
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.9.2" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.6.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
-  -->
 
     <!-- If you reference another project, by default, the dlls won't be copied in the published plugin, so you need <Private>true</Private> to force the dependency
     to be bundled in the published plugin -->
