@@ -3,9 +3,9 @@
   <!-- Plugin specific properties -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Product>BTCPay Server Plugin Template</Product>
-    <Description>A template for your own BTCPay Server plugin.</Description>
-    <Version>1.0.0</Version>
+    <Product>LNURL-pay Backend</Product>
+    <Description>Use a Lightning Address (LUD-06/16) as a virtual Lightning backend for BTCPay Server.</Description>
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
   <!-- Plugin development properties -->
