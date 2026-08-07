@@ -1,1 +1,1 @@
-PROJECT="BTCPayServer.Plugins.Template"
+PROJECT="BTCPayServer.Plugins.LnurlPayBackend"
