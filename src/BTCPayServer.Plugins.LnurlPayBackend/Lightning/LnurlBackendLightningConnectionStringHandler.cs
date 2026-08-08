@@ -54,9 +54,9 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     {
         _address = address;
         _network = network;
-        // ponytail: no DI here, so replicate Plugin.cs SSRF guard (redirects off)
         _lnurlClient = lnurlClient ?? new LnurlClient(
-            new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }));
+            new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: false)));
+
         _logger = logger;
     }
 

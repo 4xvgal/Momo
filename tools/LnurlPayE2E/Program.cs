@@ -16,7 +16,9 @@ if (string.IsNullOrEmpty(address))
 }
 Console.WriteLine($"LNURL Pay E2E — testing with: {address}");
 
-var client = new LnurlClient(new HttpClient());
+// Use the hardened handler: single DNS resolution + IP validation (SSRF guard)
+// exercised against a real mainnet LNURL server (covers TLS/SNI/Host header).
+var client = new LnurlClient(new HttpClient(LnurlHttpHandlerFactory.Create()));
 
 // 1. Fetch LUD-06 params
 var payParams = await client.FetchLud06Params(address);
