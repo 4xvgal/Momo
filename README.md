@@ -1,6 +1,7 @@
 # BTCPay Server Plugin: LNURL-pay Backend (Lightning Address)
 
-[BTCPay Server](https://github.com/btcpayserver/btcpayserver) plugin that turns an external **Lightning Address (LUD-06/16)** into a "virtual Lightning backend". The store doesn't run a node — the merchant just registers the Lightning Address of the wallet they already use (Wallet of Satoshi, Alby, Phoenix, Blink, ...).
+[BTCPay Server](https://github.com/btcpayserver/btcpayserver) plugin that turns an external **Lightning Address (LUD-06/16)** into a "virtual Lightning backend". merchant 
+can register the Lightning Address of the wallet to setup virtual LN node. (Alby, Blink etc)
 
 ## How it works
 
