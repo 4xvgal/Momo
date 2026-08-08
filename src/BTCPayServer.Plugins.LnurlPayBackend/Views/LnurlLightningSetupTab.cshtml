@@ -1,0 +1,133 @@
+@using BTCPayServer.Models.StoreViewModels
+@model LightningNodeViewModel
+
+@* ponytail: LNURL backend tab pane. Uses its own connection string logic, syncs to the form. *@
+<div id="LnurlBackendSetup" class="pt-3 tab-pane fade" role="tabpanel"
+     aria-labelledby="LightningNodeType-LnurlBackend">
+    <p class="mb-3" text-translate="true">
+        Use a Lightning Address (LUD-06/LUD-21) as your Lightning node.
+        Payments are routed through the LNURL provider and settled automatically.
+    </p>
+
+    <div class="form-group">
+        <label for="lnurl-address-input" class="form-label">Lightning Address</label>
+        <div class="d-sm-flex">
+            <input id="lnurl-address-input" class="form-control mb-2 me-2" type="text"
+                   placeholder="you@wallet.com" autocomplete="off" />
+        </div>
+        <div class="d-sm-flex">
+            <button id="lnurl-test" type="button" class="btn btn-secondary text-nowrap mb-2" text-translate="true">
+                Test connection
+            </button>
+        </div>
+        <span id="lnurl-validation-result"></span>
+    </div>
+
+    <div class="accordion mt-4" id="LnurlProviderInfo">
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="LnurlProviderHeader">
+                <button type="button" class="accordion-button collapsed" data-bs-toggle="collapse"
+                        data-bs-target="#LnurlProviderContent" aria-controls="LnurlProviderContent" aria-expanded="false">
+                    <span><strong>LNURL-backend</strong>&nbsp;via LUD-06/LUD-21</span>
+                    <vc:icon symbol="caret-down" />
+                </button>
+            </h2>
+            <div id="LnurlProviderContent" class="accordion-collapse collapse" aria-labelledby="LnurlProviderHeader"
+                 data-bs-parent="#LnurlProviderInfo">
+                <div class="accordion-body">
+                    <ul class="pb-0">
+                        <li>
+                            <code><b>type=</b>lnurl-backend;<b>address=</b>you@wallet.com</code>
+                        </li>
+                    </ul>
+                    <p class="mt-2 mb-0" html-translate="true">
+                        Any Lightning Address provider that supports <b>LUD-06</b> (lnurl-pay) and
+                        <b>LUD-21</b> (verify) is compatible. Examples: Alby Hub, Blink,
+                        or your own LNURL server.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const addrInput = document.getElementById('lnurl-address-input');
+    const connString = document.querySelector('[name="ConnectionString"]');
+    const testBtn = document.getElementById('lnurl-test');
+    const resultSpan = document.getElementById('lnurl-validation-result');
+
+    // -- form submit --
+    const form = addrInput.closest('form');
+    if (form) {
+        form.addEventListener('submit', function () {
+            const addr = addrInput.value.trim();
+            if (addr) {
+                connString.value = 'type=lnurl-backend;address=' + addr;
+            }
+        });
+    }
+
+    // pre-fill if connection string already is lnurl-backend type
+    (function () {
+        const currentConn = connString.value || '';
+        const match = currentConn.match(/type=lnurl-backend;address=(.+)/);
+        if (match) {
+            addrInput.value = match[1];
+            var tabEl = document.getElementById('LightningNodeType-LnurlBackend');
+            if (tabEl && !tabEl.checked) {
+                // ponytail: trigger native click so Bootstrap Tab + radio group update together
+                tabEl.click();
+                // fallback: ensure pane classes are correct in case Bootstrap missed it
+                document.querySelectorAll('#LightningNodeTypeTablist [role="tab"]').forEach(t => t.classList.remove('active'));
+                tabEl.classList.add('active');
+                document.querySelectorAll('#LightningNodeTypeTabs .tab-pane').forEach(p => p.classList.remove('active', 'show'));
+                var pane = document.getElementById('LnurlBackendSetup');
+                if (pane) pane.classList.add('active', 'show');
+            }
+        }
+    })();
+
+    // test connection via API endpoint
+    testBtn.addEventListener('click', async function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const addr = addrInput.value.trim();
+        if (!addr) { resultSpan.textContent = 'Enter a Lightning Address first.'; return; }
+
+        testBtn.disabled = true;
+        resultSpan.className = 'text-muted';
+        resultSpan.textContent = 'Testing...';
+
+        try {
+            const csrf = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const resp = await fetch('/api/lnurl-backend/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': csrf
+                },
+                body: JSON.stringify({ address: addr })
+            });
+            const data = await resp.json();
+            console.log('lnurl test response', data);
+
+            if ((data.status || data.Status) === 'ok') {
+                resultSpan.className = 'text-success';
+                resultSpan.textContent = data.message || data.Message || 'Connection successful.';
+            } else {
+                resultSpan.className = 'text-danger';
+                resultSpan.textContent = data.error || data.Error || data.message || data.Message || 'Connection failed.';
+            }
+        } catch (e) {
+            console.error('lnurl test error', e);
+            resultSpan.className = 'text-danger';
+            resultSpan.textContent = 'Network error: ' + (e.message || 'unknown');
+        } finally {
+            testBtn.disabled = false;
+        }
+    });
+})();
+</script>

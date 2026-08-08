@@ -8,6 +8,12 @@
     <Version>0.1.0</Version>
   </PropertyGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BTCPayServer.Plugins.LnurlPayBackend.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <!-- Plugin development properties -->
   <PropertyGroup>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
@@ -46,6 +52,11 @@
     </ProjectReference>
   </ItemGroup>
   -->
+
+  <ItemGroup>
+    <PackageReference Include="NBitcoin" Version="10.0.7" />
+    <PackageReference Include="BTCPayServer.Lightning.All" Version="1.7.6" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\submodules\btcpayserver\BTCPayServer\BTCPayServer.csproj" />

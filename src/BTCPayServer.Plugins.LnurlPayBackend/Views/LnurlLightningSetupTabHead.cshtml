@@ -1,0 +1,10 @@
+@using BTCPayServer.Models.StoreViewModels
+@model LightningNodeViewModel
+
+@* ponytail: LNURL tab head. Same radio group as Internal/Custom, value=Custom so server accepts it on save. *@
+<input type="radio" name="LightningNodeType" value="@LightningNodeType.Custom"
+       id="LightningNodeType-LnurlBackend"
+       data-bs-toggle="pill" data-bs-target="#LnurlBackendSetup"
+       role="tab" aria-controls="LnurlBackendSetup" aria-selected="false"
+       class="">
+<label for="LightningNodeType-LnurlBackend">Use LNURL backend</label>

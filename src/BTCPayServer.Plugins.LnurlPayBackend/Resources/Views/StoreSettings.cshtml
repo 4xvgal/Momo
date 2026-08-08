@@ -1,0 +1,37 @@
+@model BTCPayServer.Plugins.LnurlPayBackend.Controllers.LnurlBackendViewModel
+
+@{
+    ViewData["Title"] = "LNURL Pay Backend";
+    Layout = "_Layout";
+}
+
+<div class="container">
+    <partial name="_StatusMessage" />
+
+    <h2 class="mt-4 mb-4">LNURL Pay Backend</h2>
+
+    <div class="alert alert-warning" role="alert">
+        This payment method does not support automatic refunds.
+        Refunds must be sent manually by the merchant.
+    </div>
+
+    <form method="post" asp-route-storeId="@Model.StoreId">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label asp-for="LightningAddress" class="form-label">Lightning Address</label>
+                <input asp-for="LightningAddress" class="form-control"
+                       placeholder="you@wallet.com" />
+                <span asp-validation-for="LightningAddress" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-check mb-3">
+            <input asp-for="Enabled" class="form-check-input" type="checkbox" />
+            <label asp-for="Enabled" class="form-check-label">Enabled</label>
+        </div>
+
+        <button type="submit" name="command" value="save" class="btn btn-primary">
+            Save & Validate
+        </button>
+    </form>
+</div>
