@@ -23,12 +23,14 @@ public class Plugin : BaseBTCPayServerPlugin
     public override void Execute(IServiceCollection services)
     {
         services.AddMigration<ApplicationDbContext, LnurlBackendSettingsMigration>();
+        services.AddMigration<ApplicationDbContext, LnurlBackendInvoicesMigration>();
         services.AddHttpClient<LnurlClient>()
             .ConfigurePrimaryHttpMessageHandler(() => LnurlHttpHandlerFactory.Create(allowLoopback:false));
         services.AddSingleton<IPaymentMethodHandler, LnurlBackendPaymentMethodHandler>();
         services.AddSingleton<IHostedService, LnurlVerifyListener>();
         services.AddSingleton<ICheckoutModelExtension, LnurlBackendCheckoutModelExtension>();
         services.AddSingleton<ILightningConnectionStringHandler, LnurlBackendLightningConnectionStringHandler>();
+        services.AddSingleton<LnurlBackendInvoiceRepository>();
 
         // Lightning setup tab integration
         services.AddUIExtension("ln-payment-method-setup-tabhead", "/Plugins/LnurlPayBackend/Views/LnurlLightningSetupTabHead.cshtml");
