@@ -12,4 +12,11 @@
     <PackageReference Include="BTCPayServer.Lightning.All" Version="1.7.6" />
   </ItemGroup>
 
+  <!-- Keep BTCPayServer references from putting static web assets into the output -->
+  <ItemDefinitionGroup>
+    <ProjectReference>
+      <Properties>StaticWebAssetsEnabled=false</Properties>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
 </Project>

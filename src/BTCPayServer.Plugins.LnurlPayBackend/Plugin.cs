@@ -24,7 +24,7 @@ public class Plugin : BaseBTCPayServerPlugin
     {
         services.AddMigration<ApplicationDbContext, LnurlBackendSettingsMigration>();
         services.AddHttpClient<LnurlClient>()
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+            .ConfigurePrimaryHttpMessageHandler(() => LnurlHttpHandlerFactory.Create(allowLoopback:false));
         services.AddSingleton<IPaymentMethodHandler, LnurlBackendPaymentMethodHandler>();
         services.AddSingleton<IHostedService, LnurlVerifyListener>();
         services.AddSingleton<ICheckoutModelExtension, LnurlBackendCheckoutModelExtension>();

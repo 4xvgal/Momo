@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using BTCPayServer.Payments;
 using BTCPayServer.Plugins.LnurlPayBackend.Payments;
@@ -91,6 +92,135 @@ public class LnurlClientTests
     {
         Assert.Throws<ArgumentException>(() =>
             LnurlClient.ValidateUrl("https://127.0.0.1/.well-known/lnurlp/johndoe"));
+    }
+
+    [Fact]
+    public void SelectPublicIp_Mixed_ReturnsFirstPublic()
+    {
+        var factory = new LnurlHttpHandlerFactory(allowLoopback: false);
+        var ip = factory.SelectPublicIp(new[]
+        {
+            IPAddress.Parse("1.1.1.1"),
+            IPAddress.Parse("10.0.0.1"),
+        });
+        Assert.Equal(IPAddress.Parse("1.1.1.1"), ip);
+    }
+
+    [Fact]
+    public void SelectPublicIp_AllPrivate_Throws()
+    {
+        var factory = new LnurlHttpHandlerFactory(allowLoopback: false);
+        Assert.Throws<InvalidOperationException>(() => factory.SelectPublicIp(new[]
+        {
+            IPAddress.Parse("127.0.0.1"),
+            IPAddress.Parse("192.168.1.1"),
+        }));
+    }
+
+    [Fact]
+    public void SelectPublicIp_AllowLoopback_ReturnsLoopback()
+    {
+        var factory = new LnurlHttpHandlerFactory(allowLoopback: true);
+        Assert.Equal(IPAddress.Parse("127.0.0.1"),
+            factory.SelectPublicIp(new[] { IPAddress.Parse("127.0.0.1") }));
+    }
+
+    [Fact]
+    public async Task ConnectCallback_BlocksLoopback()
+    {
+        // Blocking happens before any TCP connect, so a dead port is enough.
+        // SocketsHttpHandler wraps ConnectCallback exceptions in HttpRequestException,
+        // so assert the inner exception is our gate rejection.
+        using var client = new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: false));
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.GetAsync("http://localhost:9999/"));
+        Assert.IsType<InvalidOperationException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task ConnectCallback_AllowLoopback_PassesGate()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var (port, server) = StartMiniHttpServer(cts.Token);
+
+        using var client = new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: true));
+        var response = await client.GetAsync($"http://localhost:{port}/", cts.Token);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        cts.Cancel();
+        try { await server; } catch (OperationCanceledException) { }
+    }
+
+    [Fact]
+    public async Task ConnectCallback_PinsHostHeader()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var hostSeen = new TaskCompletionSource<string>();
+        var (port, server) = StartMiniHttpServer(cts.Token, headers =>
+        {
+            var hostLine = headers.Split("\r\n")
+                .First(l => l.StartsWith("Host:", StringComparison.OrdinalIgnoreCase));
+            hostSeen.TrySetResult(hostLine["Host:".Length..].Trim());
+        });
+
+        using var client = new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: true));
+        await client.GetAsync($"http://localhost:{port}/", cts.Token);
+
+        // Connection goes to the validated IP, but the Host header must stay the
+        // original domain — otherwise virtual hosting and TLS cert validation break.
+        Assert.Equal($"localhost:{port}", await hostSeen.Task);
+
+        cts.Cancel();
+        try { await server; } catch (OperationCanceledException) { }
+    }
+
+    /// <summary>
+    /// Mini HTTP server on an ephemeral localhost port, responding 200 to every
+    /// connection. Runs in a loop: SocketsHttpHandler retries on connection
+    /// failure, and a second connect would otherwise sit in the listen backlog
+    /// forever. Dual-mode socket: localhost resolves to [::1, 127.0.0.1] and
+    /// ConnectCallback picks the first, so the listener must accept both stacks.
+    /// </summary>
+    private static (int Port, Task Server) StartMiniHttpServer(
+        CancellationToken ct, Action<string>? onRequest = null)
+    {
+        var listenSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp)
+        {
+            DualMode = true
+        };
+        listenSocket.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
+        listenSocket.Listen(10);
+        var port = ((IPEndPoint)listenSocket.LocalEndPoint).Port;
+
+        var server = Task.Run(async () =>
+        {
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    using var conn = await listenSocket.AcceptAsync(ct);
+                    using var stream = new NetworkStream(conn, ownsSocket: true);
+                    var sb = new StringBuilder();
+                    var buffer = new byte[1024];
+                    while (!sb.ToString().Contains("\r\n\r\n"))
+                    {
+                        var n = await stream.ReadAsync(buffer, ct);
+                        if (n == 0) break;
+                        sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
+                    }
+                    onRequest?.Invoke(sb.ToString());
+                    var resp = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    await stream.WriteAsync(resp, ct);
+                }
+            }
+            finally
+            {
+                listenSocket.Dispose();
+            }
+        });
+
+        return (port, server);
     }
 
     // ============================
