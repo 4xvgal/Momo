@@ -22,12 +22,17 @@ namespace BTCPayServer.Plugins.LnurlPayBackend.Payments;
 public class LnurlClient
 {
     private readonly HttpClient _httpClient;
+    private readonly bool _allowHttp;
     private const int MaxResponseBytes = 8192;
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
-    public LnurlClient(HttpClient httpClient)
+    /// <param name="allowHttp">Dev-only: allow plain HTTP (e.g. a regtest instance on
+    /// localhost). Never enable in production — SSRF guard and HTTPS enforcement
+    /// are what keep the plugin safe.</param>
+    public LnurlClient(HttpClient httpClient, bool allowHttp = false)
     {
         _httpClient = httpClient;
+        _allowHttp = allowHttp;
         _httpClient.Timeout = DefaultTimeout;
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("BTCPayServer-LnurlPayBackend/0.1");
     }
@@ -38,7 +43,8 @@ public class LnurlClient
     public async Task<Lud06Params> FetchLud06Params(string lightningAddress, CancellationToken ct = default)
     {
         var (user, domain) = ParseLightningAddress(lightningAddress);
-        var url = $"https://{domain}/.well-known/lnurlp/{Uri.EscapeDataString(user)}";
+        var scheme = _allowHttp ? Uri.UriSchemeHttp : Uri.UriSchemeHttps;
+        var url = $"{scheme}://{domain}/.well-known/lnurlp/{Uri.EscapeDataString(user)}";
         var json = await GetStringAsync(url, ct);
         return JsonConvert.DeserializeObject<Lud06Params>(json)
             ?? throw new InvalidOperationException("Empty LUD-06 response");
@@ -91,10 +97,16 @@ public class LnurlClient
         return JsonConvert.DeserializeObject<LnurlVerifyResponse>(json)
             ?? throw new InvalidOperationException("Empty verify reponse");
     }
-    internal static void ValidateUrl(string url)
+    internal void ValidateUrl(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             throw new ArgumentException($"Invalid URL: {url}");
+
+        // Dev mode (allowHttp) trusts the configured backend entirely:
+        // no HTTPS enforcement, no private-IP blocking (regtest/localhost testing).
+        // The ConnectCallback in LnurlHttpHandlerFactory has the same switch.
+        if (_allowHttp)
+            return;
 
         // HTTPS only
         if (uri.Scheme != Uri.UriSchemeHttps)

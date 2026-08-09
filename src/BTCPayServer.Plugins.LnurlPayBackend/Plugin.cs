@@ -9,6 +9,7 @@ using BTCPayServer.Plugins.LnurlPayBackend.Lightning;
 using BTCPayServer.Plugins.LnurlPayBackend.Payments;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 using System.Net.Http;
 
 namespace BTCPayServer.Plugins.LnurlPayBackend;
@@ -24,8 +25,16 @@ public class Plugin : BaseBTCPayServerPlugin
     {
         services.AddMigration<ApplicationDbContext, LnurlBackendSettingsMigration>();
         services.AddMigration<ApplicationDbContext, LnurlBackendInvoicesMigration>();
-        services.AddHttpClient<LnurlClient>()
-            .ConfigurePrimaryHttpMessageHandler(() => LnurlHttpHandlerFactory.Create(allowLoopback:false));
+        // Dev-only: "LnurlBackendAllowHttp": true in appsettings.dev.json lets a local
+        // regtest instance (http://localhost) be used as the LNURL backend. It opens
+        // plain HTTP AND loopback — never enable in production.
+        services.AddSingleton(sp =>
+        {
+            var devMode = sp.GetRequiredService<IConfiguration>().GetValue<bool>("LnurlBackendAllowHttp");
+            return new LnurlClient(
+                new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: devMode)),
+                allowHttp: devMode);
+        });
         services.AddSingleton<IPaymentMethodHandler, LnurlBackendPaymentMethodHandler>();
         services.AddSingleton<IHostedService, LnurlVerifyListener>();
         services.AddSingleton<ICheckoutModelExtension, LnurlBackendCheckoutModelExtension>();
