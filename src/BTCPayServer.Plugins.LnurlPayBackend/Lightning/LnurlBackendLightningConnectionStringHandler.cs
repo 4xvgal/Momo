@@ -257,6 +257,22 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
             {
                 while (!ct.IsCancellationRequested)
                 {
+                    // The connection-string handler creates a fresh client instance per
+                    // call, so this listener's in-memory dict may be empty even though
+                    // invoices were persisted by another instance. Load pending invoices
+                    // from the DB every cycle to cover that gap.
+                    if (_repository is not null)
+                    {
+                        try
+                        {
+                            foreach (var inv in await _repository.LoadPendingAsync(ct))
+                                _urls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "PollingListener failed to load pending invoices");
+                        }
+                    }
                     foreach (var (hash, (url, bolt11, amountMsat)) in _urls.ToArray())
                     {
                         try
