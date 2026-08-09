@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BTCPayServer.Plugins.LnurlPayBackend\BTCPayServer.Plugins.LnurlPayBackend.csproj" />
     <ProjectReference Include="..\..\submodules\btcpayserver\BTCPayServer.Tests\BTCPayServer.Tests.csproj" />
   </ItemGroup>

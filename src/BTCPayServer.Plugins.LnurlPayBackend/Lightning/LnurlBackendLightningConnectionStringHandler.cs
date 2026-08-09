@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BTCPayServer.Lightning;
 using BTCPayServer.Payments.Lightning;
+using BTCPayServer.Plugins.LnurlPayBackend.Data;
 using BTCPayServer.Plugins.LnurlPayBackend.Payments;
 using Microsoft.Extensions.Logging;
 using NBitcoin;
@@ -15,10 +16,14 @@ namespace BTCPayServer.Plugins.LnurlPayBackend.Lightning;
 
 public class LnurlBackendLightningConnectionStringHandler : ILightningConnectionStringHandler
 {
+    private readonly LnurlBackendInvoiceRepository? _repository;
     private readonly ILogger? _logger;
 
-    public LnurlBackendLightningConnectionStringHandler(ILogger<LnurlBackendLightningConnectionStringHandler>? logger = null)
+    public LnurlBackendLightningConnectionStringHandler(
+        LnurlBackendInvoiceRepository? repository = null,
+        ILogger<LnurlBackendLightningConnectionStringHandler>? logger = null)
     {
+        _repository = repository;
         _logger = logger;
     }
 
@@ -38,7 +43,7 @@ public class LnurlBackendLightningConnectionStringHandler : ILightningConnection
         }
 
         error = null;
-        return new LnurlBackendLightningClient(address, network, logger: _logger);
+        return new LnurlBackendLightningClient(address, network, logger: _logger, repository: _repository);
     }
 }
 
@@ -48,9 +53,11 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     private readonly Network _network;
     private readonly LnurlClient _lnurlClient;
     private readonly ILogger? _logger;
+    private readonly LnurlBackendInvoiceRepository? _repository;
     private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> _verifyUrls = new();
+    private Task? _cacheLoadTask;
 
-    public LnurlBackendLightningClient(string address, Network network, LnurlClient? lnurlClient = null, ILogger? logger = null)
+    public LnurlBackendLightningClient(string address, Network network, LnurlClient? lnurlClient = null, ILogger? logger = null, LnurlBackendInvoiceRepository? repository = null)
     {
         _address = address;
         _network = network;
@@ -58,6 +65,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
             new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: false)));
 
         _logger = logger;
+        _repository = repository;
     }
 
     public override string ToString() => $"type=lnurl-backend;address={_address}";
@@ -77,8 +85,22 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
                 "This Lightning Address provider does not support LUD-21 verify. " +
                 "Payment status cannot be detected. Use a provider that supports LUD-21.");
 
-        // Store verify URL for later GetInvoice polling
+        // Store verify URL for later GetInvoice polling (memory + DB if available)
         _verifyUrls[paymentHash] = (invoice.Verify, invoice.Pr, msat);
+        if (_repository is not null)
+        {
+            try
+            {
+                await _repository.PersistAsync(paymentHash, invoice.Pr, invoice.Verify,
+                    msat, bolt11.ExpiryDate, c);
+            }
+            catch (Exception ex)
+            {
+                // invoice creation must not fail because persistence failed;
+                // polling still works for this session via the in-memory dict
+                _logger?.LogError(ex, "Failed to persist invoice {Hash}", paymentHash);
+            }
+        }
 
         return new LightningInvoice
         {
@@ -95,12 +117,13 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     public async Task<LightningInvoice> CreateInvoice(CreateInvoiceParams p, CancellationToken c = default)
         => await CreateInvoice(p.Amount, p.Description, p.Expiry, c);
 
-    public Task<LightningInvoice> GetInvoice(string invoiceId, CancellationToken c = default)
+    public async Task<LightningInvoice> GetInvoice(string invoiceId, CancellationToken c = default)
     {
+        await EnsureCacheLoadedAsync(c);
         if (!_verifyUrls.TryGetValue(invoiceId, out var entry))
-            return Task.FromResult(new LightningInvoice { Id = invoiceId, Status = LightningInvoiceStatus.Unpaid });
+            return new LightningInvoice { Id = invoiceId, Status = LightningInvoiceStatus.Unpaid };
 
-        return GetInvoiceCore(invoiceId, entry.VerifyUrl, c);
+        return await GetInvoiceCore(invoiceId, entry.VerifyUrl, c);
     }
 
     private async Task<LightningInvoice> GetInvoiceCore(string invoiceId, string verifyUrl, CancellationToken c)
@@ -116,6 +139,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
                 _logger?.LogError("GetInvoiceCore got invalid preimage for invoice {InvoiceId}", invoiceId);
                 return new LightningInvoice { Id = invoiceId, Status = LightningInvoiceStatus.Unpaid };
             }
+            await TryRemoveInvoiceAsync(invoiceId);
         }
 
         return new LightningInvoice
@@ -172,9 +196,39 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
 
     public Task<ILightningInvoiceListener> Listen(CancellationToken c = default)
     {
-        var listener = new PollingListener(_verifyUrls, _lnurlClient, _logger);
+        var listener = new PollingListener(_verifyUrls, _lnurlClient, _logger, _repository);
         listener.Start(c);
         return Task.FromResult<ILightningInvoiceListener>(listener);
+    }
+
+    /// <summary>
+    /// Loads pending invoices from the DB into the in-memory cache once.
+    /// A failed load resets the flag so the next call retries.
+    /// </summary>
+    private async Task EnsureCacheLoadedAsync(CancellationToken c)
+    {
+        if (_repository is null || _cacheLoadTask is not null) return;
+        _cacheLoadTask = LoadPendingInvoicesAsync(c);
+        try { await _cacheLoadTask; }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to load pending invoices from DB");
+            _cacheLoadTask = null;
+        }
+    }
+
+    private async Task LoadPendingInvoicesAsync(CancellationToken c)
+    {
+        var pending = await _repository!.LoadPendingAsync(c);
+        foreach (var inv in pending)
+            _verifyUrls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat);
+    }
+
+    private async Task TryRemoveInvoiceAsync(string invoiceId)
+    {
+        if (_repository is null) return;
+        try { await _repository.RemoveAsync(invoiceId); }
+        catch (Exception ex) { _logger?.LogError(ex, "Failed to remove invoice {Hash}", invoiceId); }
     }
 
     private class PollingListener : ILightningInvoiceListener
@@ -182,11 +236,12 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
         private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> _urls;
         private readonly LnurlClient _client;
         private readonly ILogger? _logger;
+        private readonly LnurlBackendInvoiceRepository? _repository;
         private readonly ConcurrentQueue<LightningInvoice> _paid = new();
         private readonly ConcurrentQueue<TaskCompletionSource<LightningInvoice>> _waiters = new();
 
-        public PollingListener(ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> urls, LnurlClient client, ILogger? logger)
-        { _urls = urls; _client = client; _logger = logger; }
+        public PollingListener(ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> urls, LnurlClient client, ILogger? logger, LnurlBackendInvoiceRepository? repository)
+        { _urls = urls; _client = client; _logger = logger; _repository = repository; }
 
         public void Start(CancellationToken ct)
         {
@@ -210,6 +265,12 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
 
                                 if (!_urls.TryRemove(hash, out var entry))
                                     continue;
+
+                                if (_repository is not null)
+                                {
+                                    try { await _repository.RemoveAsync(hash, ct); }
+                                    catch (Exception ex) { _logger?.LogError(ex, "Failed to remove invoice {Hash}", hash); }
+                                }
 
                                 var money = new LightMoney(entry.AmountMsat, LightMoneyUnit.MilliSatoshi);
                                 var inv = new LightningInvoice
