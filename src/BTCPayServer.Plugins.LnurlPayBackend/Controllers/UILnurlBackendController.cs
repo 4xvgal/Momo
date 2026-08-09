@@ -14,7 +14,6 @@ using Newtonsoft.Json.Linq;
 
 namespace BTCPayServer.Plugins.LnurlPayBackend.Controllers;
 
-[Area("LnurlPayBackend")]
 [Route("stores/{storeId}")]
 [Authorize(AuthenticationSchemes = AuthenticationSchemes.Cookie)]
 [Authorize(Policy = Policies.CanViewStoreSettings, AuthenticationSchemes = AuthenticationSchemes.Cookie)]
@@ -50,7 +49,7 @@ public class UILnurlBackendController : Controller
             Enabled = !Store.GetStoreBlob().GetExcludedPaymentMethods().Match(Pmi)
         };
 
-        return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+        return View("StoreSettings", vm);
     }
 
     [HttpPost("lnurl-backend")]
@@ -64,7 +63,7 @@ public class UILnurlBackendController : Controller
             if (string.IsNullOrWhiteSpace(vm.LightningAddress))
             {
                 ModelState.AddModelError(nameof(vm.LightningAddress), "Lightning Address is required.");
-                return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+                return View("StoreSettings", vm);
             }
 
             // Validate LUD-06 + LUD-21
@@ -75,7 +74,7 @@ public class UILnurlBackendController : Controller
                 {
                     ModelState.AddModelError(nameof(vm.LightningAddress),
                         "This LNURL does not support payRequest.");
-                    return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+                    return View("StoreSettings", vm);
                 }
 
                 var testAmount = payParams.MinSendable;
@@ -85,7 +84,7 @@ public class UILnurlBackendController : Controller
                 {
                     ModelState.AddModelError(nameof(vm.LightningAddress),
                         "This provider does not support LUD-21 verify. Choose a wallet that supports it.");
-                    return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+                    return View("StoreSettings", vm);
                 }
             }
             catch (Exception ex)
@@ -93,7 +92,7 @@ public class UILnurlBackendController : Controller
                 _logger.LogError(ex, "LNURL backend validation failed for {Address}", vm.LightningAddress);
                 ModelState.AddModelError(nameof(vm.LightningAddress),
                     "Validation failed. See server logs for details.");
-                return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+                return View("StoreSettings", vm);
             }
 
             // Save config
@@ -113,7 +112,7 @@ public class UILnurlBackendController : Controller
             return RedirectToAction(nameof(Settings), new { storeId });
         }
 
-        return View("/Plugins/LnurlPayBackend/Resources/Views/StoreSettings.cshtml", vm);
+        return View("StoreSettings", vm);
     }
 }
 

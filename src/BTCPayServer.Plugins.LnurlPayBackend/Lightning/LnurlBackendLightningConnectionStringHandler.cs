@@ -9,6 +9,7 @@ using BTCPayServer.Lightning;
 using BTCPayServer.Payments.Lightning;
 using BTCPayServer.Plugins.LnurlPayBackend.Data;
 using BTCPayServer.Plugins.LnurlPayBackend.Payments;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NBitcoin;
 
@@ -17,14 +18,18 @@ namespace BTCPayServer.Plugins.LnurlPayBackend.Lightning;
 public class LnurlBackendLightningConnectionStringHandler : ILightningConnectionStringHandler
 {
     private readonly LnurlBackendInvoiceRepository? _repository;
+    private readonly bool _allowHttp;
     private readonly ILogger? _logger;
 
     public LnurlBackendLightningConnectionStringHandler(
         LnurlBackendInvoiceRepository? repository = null,
-        ILogger<LnurlBackendLightningConnectionStringHandler>? logger = null)
+        ILogger<LnurlBackendLightningConnectionStringHandler>? logger = null,
+        IConfiguration? configuration = null)
     {
         _repository = repository;
         _logger = logger;
+        // Dev-only switch, same key as the DI-registered LnurlClient
+        _allowHttp = configuration?.GetValue<bool>("LnurlBackendAllowHttp") ?? false;
     }
 
     public ILightningClient? Create(string connectionString, Network network, out string? error)
@@ -43,7 +48,8 @@ public class LnurlBackendLightningConnectionStringHandler : ILightningConnection
         }
 
         error = null;
-        return new LnurlBackendLightningClient(address, network, logger: _logger, repository: _repository);
+        return new LnurlBackendLightningClient(address, network, logger: _logger,
+            repository: _repository, allowHttp: _allowHttp);
     }
 }
 
@@ -57,12 +63,14 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> _verifyUrls = new();
     private Task? _cacheLoadTask;
 
-    public LnurlBackendLightningClient(string address, Network network, LnurlClient? lnurlClient = null, ILogger? logger = null, LnurlBackendInvoiceRepository? repository = null)
+    public LnurlBackendLightningClient(string address, Network network, LnurlClient? lnurlClient = null, ILogger? logger = null, LnurlBackendInvoiceRepository? repository = null, bool allowHttp = false)
     {
         _address = address;
         _network = network;
+        // ponytail: no DI here, so replicate Plugin.cs SSRF guard (redirects off);
+        // allowHttp is the dev-only switch (same config key as the DI client)
         _lnurlClient = lnurlClient ?? new LnurlClient(
-            new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: false)));
+            new HttpClient(LnurlHttpHandlerFactory.Create(allowLoopback: allowHttp)), allowHttp);
 
         _logger = logger;
         _repository = repository;
@@ -249,6 +257,22 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
             {
                 while (!ct.IsCancellationRequested)
                 {
+                    // The connection-string handler creates a fresh client instance per
+                    // call, so this listener's in-memory dict may be empty even though
+                    // invoices were persisted by another instance. Load pending invoices
+                    // from the DB every cycle to cover that gap.
+                    if (_repository is not null)
+                    {
+                        try
+                        {
+                            foreach (var inv in await _repository.LoadPendingAsync(ct))
+                                _urls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "PollingListener failed to load pending invoices");
+                        }
+                    }
                     foreach (var (hash, (url, bolt11, amountMsat)) in _urls.ToArray())
                     {
                         try

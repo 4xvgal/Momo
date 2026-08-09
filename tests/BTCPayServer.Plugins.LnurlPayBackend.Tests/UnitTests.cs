@@ -77,21 +77,28 @@ public class LnurlClientTests
     public void ValidateUrl_Https_Ok()
     {
         // Should not throw
-        LnurlClient.ValidateUrl("https://wallet.com/.well-known/lnurlp/johndoe");
+        new LnurlClient(new HttpClient()).ValidateUrl("https://wallet.com/.well-known/lnurlp/johndoe");
     }
 
     [Fact]
     public void ValidateUrl_Http_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            LnurlClient.ValidateUrl("http://wallet.com/.well-known/lnurlp/johndoe"));
+            new LnurlClient(new HttpClient()).ValidateUrl("http://wallet.com/.well-known/lnurlp/johndoe"));
+    }
+
+    [Fact]
+    public void ValidateUrl_Http_Allowed_WhenAllowHttp()
+    {
+        // Dev-only switch: plain HTTP passes for local regtest instances
+        new LnurlClient(new HttpClient(), allowHttp: true).ValidateUrl("http://wallet.com/.well-known/lnurlp/johndoe");
     }
 
     [Fact]
     public void ValidateUrl_Loopback_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            LnurlClient.ValidateUrl("https://127.0.0.1/.well-known/lnurlp/johndoe"));
+            new LnurlClient(new HttpClient()).ValidateUrl("https://127.0.0.1/.well-known/lnurlp/johndoe"));
     }
 
     [Fact]
