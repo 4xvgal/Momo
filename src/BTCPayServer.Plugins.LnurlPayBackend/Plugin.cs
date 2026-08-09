@@ -32,8 +32,10 @@ public class Plugin : BaseBTCPayServerPlugin
         services.AddSingleton<ILightningConnectionStringHandler, LnurlBackendLightningConnectionStringHandler>();
         services.AddSingleton<LnurlBackendInvoiceRepository>();
 
-        // Lightning setup tab integration
-        services.AddUIExtension("ln-payment-method-setup-tabhead", "/Plugins/LnurlPayBackend/Views/LnurlLightningSetupTabHead.cshtml");
-        services.AddUIExtension("ln-payment-method-setup-tab", "/Plugins/LnurlPayBackend/Views/LnurlLightningSetupTab.cshtml");
+        // Lightning setup tab integration — partials are compiled into the plugin
+        // assembly by the Razor SDK, so they are registered by name (not path)
+        services.AddUIExtension("ln-payment-method-setup-tabhead", "LnurlLightningSetupTabHead");
+        services.AddUIExtension("ln-payment-method-setup-tab", "LnurlLightningSetupTab");
+        services.AddUIExtension("store-category-nav", "NavExtension");
     }
 }

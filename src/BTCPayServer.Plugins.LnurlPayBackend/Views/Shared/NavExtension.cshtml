@@ -1,0 +1,7 @@
+@{
+    var storeId = Context.GetRouteValue("storeId") as string;
+}
+<a asp-controller="UILnurlBackend" asp-action="Settings"
+   asp-route-storeId="@storeId" class="nav-link">
+    LNURL Pay Backend
+</a>
