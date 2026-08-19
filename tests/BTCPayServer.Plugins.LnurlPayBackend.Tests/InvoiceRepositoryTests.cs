@@ -112,7 +112,7 @@ public class InvoiceRepositoryTests : IDisposable
         // "Before restart": invoice created and persisted
         var client1 = new LnurlBackendLightningClient(TestData.LightningAddress, Network.Main, lnurl, repository: _repo);
         var invoice = await client1.CreateInvoice(LightMoney.MilliSatoshis(5000), "memo",
-            TimeSpan.FromMinutes(5), CancellationToken.None);
+            TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
 
         // The static spec-vector invoice carries a 2017 timestamp, so its persisted
         // expiry is in the past and LoadPendingAsync would prune it. In production
@@ -130,12 +130,45 @@ public class InvoiceRepositoryTests : IDisposable
         // pair, which cannot be synthesized without an invoice generator — that
         // path is exercised on regtest instead.
         var client2 = new LnurlBackendLightningClient(TestData.LightningAddress, Network.Main, lnurl, repository: _repo);
-        var recovered = await client2.GetInvoice(invoice.PaymentHash!, CancellationToken.None);
+        var recovered = await client2.GetInvoice(invoice.PaymentHash!, TestContext.Current.CancellationToken);
 
         Assert.True(verifyCalled);
         Assert.Equal(LightningInvoiceStatus.Unpaid, recovered.Status);
         // Not settled → row stays for continued polling
         Assert.Single(await _repo.LoadPendingAsync());
+    }
+
+    [Fact]
+    public async Task Client_GetInvoice_Expired_RemovesAndReturnsUnpaid()
+    {
+        var handler = new FakeHttpHandler(req =>
+        {
+            if (req.RequestUri!.ToString().Contains("/verify/"))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                { Content = new StringContent(TestData.VerifyUnsettledJson, Encoding.UTF8, "application/json") };
+            if (req.RequestUri.ToString().Contains("/callback"))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                { Content = new StringContent(TestData.CallbackJson, Encoding.UTF8, "application/json") };
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent(TestData.Lud06Json, Encoding.UTF8, "application/json") };
+        });
+        var lnurl = new LnurlClient(new HttpClient(handler));
+
+        var client = new LnurlBackendLightningClient(TestData.LightningAddress, Network.Main, lnurl, repository: _repo);
+        var invoice = await client.CreateInvoice(LightMoney.MilliSatoshis(5000), "memo",
+            TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+
+        // Force the stored invoice into the past (the spec-vector bolt11 has a 2017 timestamp)
+        using (var ctx = new SqliteContextFactory(_connection).CreateDbContext())
+            ctx.Database.ExecuteSqlRaw(
+                "UPDATE \"lnurl_backend_invoices\" SET \"ExpiresAt\" = {0}",
+                DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        var result = await client.GetInvoice(invoice.PaymentHash!, TestContext.Current.CancellationToken);
+
+        // Expired: reported Unpaid without polling, and dropped from dict + DB
+        Assert.Equal(LightningInvoiceStatus.Unpaid, result.Status);
+        Assert.Empty(await _repo.LoadPendingAsync());
     }
 }
 

@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NBitcoin;
 
+
 namespace BTCPayServer.Plugins.LnurlPayBackend.Lightning;
 
 public class LnurlBackendLightningConnectionStringHandler : ILightningConnectionStringHandler
@@ -60,7 +61,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     private readonly LnurlClient _lnurlClient;
     private readonly ILogger? _logger;
     private readonly LnurlBackendInvoiceRepository? _repository;
-    private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> _verifyUrls = new();
+    private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat, DateTimeOffset ExpiresAt)> _verifyUrls = new();
     private Task? _cacheLoadTask;
 
     public LnurlBackendLightningClient(string address, Network network, LnurlClient? lnurlClient = null, ILogger? logger = null, LnurlBackendInvoiceRepository? repository = null, bool allowHttp = false)
@@ -94,7 +95,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
                 "Payment status cannot be detected. Use a provider that supports LUD-21.");
 
         // Store verify URL for later GetInvoice polling (memory + DB if available)
-        _verifyUrls[paymentHash] = (invoice.Verify, invoice.Pr, msat);
+        _verifyUrls[paymentHash] = (invoice.Verify, invoice.Pr, msat, bolt11.ExpiryDate);
         if (_repository is not null)
         {
             try
@@ -130,6 +131,14 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
         await EnsureCacheLoadedAsync(c);
         if (!_verifyUrls.TryGetValue(invoiceId, out var entry))
             return new LightningInvoice { Id = invoiceId, Status = LightningInvoiceStatus.Unpaid };
+
+        // Expired: drop the entry so polling stops, report Unpaid
+        if (DateTimeOffset.UtcNow > entry.ExpiresAt)
+        {
+            _verifyUrls.TryRemove(invoiceId, out _);
+            await TryRemoveInvoiceAsync(invoiceId);
+            return new LightningInvoice { Id = invoiceId, Status = LightningInvoiceStatus.Unpaid };
+        }
 
         return await GetInvoiceCore(invoiceId, entry.VerifyUrl, c);
     }
@@ -229,7 +238,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     {
         var pending = await _repository!.LoadPendingAsync(c);
         foreach (var inv in pending)
-            _verifyUrls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat);
+            _verifyUrls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat, inv.ExpiresAt);
     }
 
     private async Task TryRemoveInvoiceAsync(string invoiceId)
@@ -241,14 +250,14 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
 
     private class PollingListener : ILightningInvoiceListener
     {
-        private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> _urls;
+        private readonly ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat, DateTimeOffset ExpiresAt)> _urls;
         private readonly LnurlClient _client;
         private readonly ILogger? _logger;
         private readonly LnurlBackendInvoiceRepository? _repository;
         private readonly ConcurrentQueue<LightningInvoice> _paid = new();
         private readonly ConcurrentQueue<TaskCompletionSource<LightningInvoice>> _waiters = new();
 
-        public PollingListener(ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat)> urls, LnurlClient client, ILogger? logger, LnurlBackendInvoiceRepository? repository)
+        public PollingListener(ConcurrentDictionary<string, (string VerifyUrl, string Bolt11, long AmountMsat, DateTimeOffset ExpiresAt)> urls, LnurlClient client, ILogger? logger, LnurlBackendInvoiceRepository? repository)
         { _urls = urls; _client = client; _logger = logger; _repository = repository; }
 
         public void Start(CancellationToken ct)
@@ -266,15 +275,22 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
                         try
                         {
                             foreach (var inv in await _repository.LoadPendingAsync(ct))
-                                _urls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat);
+                                _urls[inv.PaymentHash] = (inv.VerifyUrl, inv.Bolt11, inv.AmountMsat, inv.ExpiresAt);
                         }
                         catch (Exception ex)
                         {
                             _logger?.LogError(ex, "PollingListener failed to load pending invoices");
                         }
                     }
-                    foreach (var (hash, (url, bolt11, amountMsat)) in _urls.ToArray())
+                    foreach (var (hash, (url, bolt11, amountMsat, expiresAt)) in _urls.ToArray())
                     {
+                        // Expired: drop so polling stops (the DB row was already pruned
+                        // by LoadPendingAsync; the in-memory entry is the last holder)
+                        if (DateTimeOffset.UtcNow > expiresAt)
+                        {
+                            _urls.TryRemove(hash, out _);
+                            continue;
+                        }
                         try
                         {
                             var r = await _client.VerifyPayment(url, ct);
