@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Product>LNURL-pay Backend</Product>
     <Description>Use a Lightning Address (LUD-06/16) as a virtual Lightning backend for BTCPay Server.</Description>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
   </PropertyGroup>
 
   <ItemGroup>

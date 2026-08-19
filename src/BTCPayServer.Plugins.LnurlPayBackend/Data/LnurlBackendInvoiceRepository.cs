@@ -12,7 +12,7 @@ namespace BTCPayServer.Plugins.LnurlPayBackend.Data;
 /// A pending path-B invoice as stored in lnurl_backend_invoices.
 /// Column names match the record constructor parameters (SqlQueryRaw binding).
 /// </summary>
-public record PendingLnurlInvoice(string PaymentHash, string Bolt11, string VerifyUrl, long AmountMsat);
+public record PendingLnurlInvoice(string PaymentHash, string Bolt11, string VerifyUrl, long AmountMsat, DateTimeOffset ExpiresAt);
 
 /// <summary>
 /// Persists path-B (connection string) invoices so the verify polling
@@ -46,7 +46,7 @@ public class LnurlBackendInvoiceRepository
         await using var ctx = await _db.CreateDbContextAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var pending = await ctx.Database.SqlQueryRaw<PendingLnurlInvoice>("""
-            SELECT "PaymentHash", "Bolt11", "VerifyUrl", "AmountMsat"
+            SELECT "PaymentHash", "Bolt11", "VerifyUrl", "AmountMsat", "ExpiresAt"
             FROM "lnurl_backend_invoices"
             WHERE "ExpiresAt" > {0}
             """, new object[] { now }).ToListAsync(ct);
