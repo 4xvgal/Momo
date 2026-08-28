@@ -1,4 +1,4 @@
-# BTCPay Server Plugin: LNURL-pay Backend (Lightning Address)
+# MOMO - Lightning Address as Payment method.
 
 [BTCPay Server](https://github.com/btcpayserver/btcpayserver) plugin that turns an external **Lightning Address (LUD-06/16)** into a "virtual Lightning backend". merchant 
 can register the Lightning Address of the wallet to setup virtual LN node. (Alby, Blink etc)
