@@ -76,7 +76,8 @@ public class LnurlBackendPaymentMethodHandler : IPaymentMethodHandler
         ValidateAmountRange(amountMsat, payParams.MinSendable, payParams.MaxSendable);
 
         // 2) LUD-06 callback: GET {callback}?amount={msat}
-        var invoiceResp = await _lnurlClient.FetchInvoice(payParams.Callback, amountMsat);
+        var invoiceResp = await _lnurlClient.FetchInvoice(payParams.Callback, amountMsat,
+            LnurlClient.BuildComment(context.InvoiceEntity.Metadata?.ItemDesc, payParams.CommentAllowed));
         if (invoiceResp.Status == "ERROR")
             throw new PaymentMethodUnavailableException("Lightning Address provider returned an error for the payment request.");
         if (string.IsNullOrEmpty(invoiceResp.Verify))

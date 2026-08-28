@@ -53,9 +53,11 @@ public class LnurlClient
     /// <summary>
     /// GET {callback}?amount={msat} → {status, pr, verify}
     /// </summary>
-    public async Task<LnurlPayCallbackResponse> FetchInvoice(string callbackUrl, long amountMsat, CancellationToken ct = default)
+    public async Task<LnurlPayCallbackResponse> FetchInvoice(string callbackUrl, long amountMsat, string? comment = null, CancellationToken ct = default)
     {
         var url = $"{callbackUrl}{(callbackUrl.Contains('?') ? '&' : '?')}amount={amountMsat}";
+        if (!string.IsNullOrEmpty(comment))
+            url += $"&comment={Uri.EscapeDataString(comment)}"; //lud-12 comment(description)
         var json = await GetStringAsync(url, ct);
         return JsonConvert.DeserializeObject<LnurlPayCallbackResponse>(json)
             ?? throw new InvalidOperationException("Empty callback response");
@@ -169,6 +171,16 @@ public class LnurlClient
         return false;
     }
 
+    /// <summary>
+    /// LUD-12: truncate comment to commentAllowed chars. Returns null when the
+    /// provider does not accept comments (commentAllowed <= 0). Truncation over
+    /// throwing — a cosmetic field must not fail invoice creation.
+    /// </summary>
+    public static string? BuildComment(string? comment, long commentAllowed)
+        => commentAllowed > 0 && !string.IsNullOrEmpty(comment)
+            ? comment[..Math.Min(comment.Length, (int)commentAllowed)]
+            : null;
+
     internal static (string user, string domain) ParseLightningAddress(string address)
     {
         var parts = address.Split('@');
@@ -238,6 +250,9 @@ public class Lud06Params
 
     [JsonProperty("metadata")]
     public string Metadata { get; set; } = string.Empty;
+
+    [JsonProperty("commentAllowed")]
+    public long CommentAllowed { get; set; }
 
     [JsonProperty("tag")]
     public string Tag { get; set; } = string.Empty;
