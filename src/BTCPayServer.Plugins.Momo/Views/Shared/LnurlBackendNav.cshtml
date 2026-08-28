@@ -1,0 +1,7 @@
+@{
+    var storeId = ViewContext.RouteData.Values["storeId"] as string;
+}
+<a class="nav-link" asp-area="Momo" asp-controller="UILnurlBackend" asp-action="Settings"
+   asp-route-storeId="@storeId">
+    LNURL Pay Backend
+</a>

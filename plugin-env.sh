@@ -1,1 +1,1 @@
-PROJECT="BTCPayServer.Plugins.LnurlPayBackend"
+PROJECT="BTCPayServer.Plugins.Momo"
