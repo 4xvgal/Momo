@@ -26,6 +26,16 @@ public class LnurlClientTests
     }
 
     [Fact]
+    public void BuildComment_TruncatesToCommentAllowed()
+    {
+        Assert.Equal("abc", LnurlClient.BuildComment("abcdef", 3));
+        Assert.Equal("abcdef", LnurlClient.BuildComment("abcdef", 100));
+        Assert.Null(LnurlClient.BuildComment("abcdef", 0));   // provider rejects comments
+        Assert.Null(LnurlClient.BuildComment(null, 280));
+        Assert.Null(LnurlClient.BuildComment("", 280));
+    }
+
+    [Fact]
     public void ParseLightningAddress_NoAtSign_Throws()
     {
         Assert.Throws<ArgumentException>(() =>

@@ -84,7 +84,8 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     {
         var msat = amount.MilliSatoshi;
         var payParams = await _lnurlClient.FetchLud06Params(_address, c);
-        var invoice = await _lnurlClient.FetchInvoice(payParams.Callback, msat, c);
+        var invoice = await _lnurlClient.FetchInvoice(payParams.Callback, msat,
+            LnurlClient.BuildComment(description, payParams.CommentAllowed), ct: c);
 
         var bolt11 = BOLT11PaymentRequest.Parse(invoice.Pr, _network);
         var paymentHash = bolt11.PaymentHash?.ToString() ?? string.Empty;
@@ -200,7 +201,7 @@ internal class LnurlBackendLightningClient : ILightningClient, IExtendedLightnin
     public async Task<LightningNodeInformation> GetInfo(CancellationToken c = default)
     {
         var payParams = await _lnurlClient.FetchLud06Params(_address, c);
-        var invoice = await _lnurlClient.FetchInvoice(payParams.Callback, payParams.MinSendable, c);
+        var invoice = await _lnurlClient.FetchInvoice(payParams.Callback, payParams.MinSendable, ct: c);
 
         if (string.IsNullOrEmpty(invoice.Verify))
             throw new NotSupportedException(
