@@ -17,7 +17,7 @@ public class LnurlBackendCheckoutModelExtension : ICheckoutModelExtension {
 
     public LnurlBackendCheckoutModelExtension()
     {
-        PaymentMethodId = new("BTC-LNADDR");
+        PaymentMethodId = Plugin.Pmi;
     }
 
     public void ModifyCheckoutModel(CheckoutModelContext context)

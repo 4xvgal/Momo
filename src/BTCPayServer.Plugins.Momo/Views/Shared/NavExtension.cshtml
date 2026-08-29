@@ -1,7 +1,23 @@
+@using BTCPayServer
+@using BTCPayServer.Client
+@using BTCPayServer.Data
+@using BTCPayServer.Payments
+@using BTCPayServer.Plugins.Momo
+@model BTCPayServer.Components.MainNav.MainNavViewModel
 @{
-    var storeId = Context.GetRouteValue("storeId") as string;
+    // Model.Store is always set at both extension points (store-wallets-nav,
+    // store-integrations-nav) — using it instead of route values keeps the item
+    // visible on every page, like Bitcoin/Lightning.
+    var storeId = Model.Store.Id;
+    var isActive = Context.Request.Path.Value?.Contains("/lnurl-backend") == true;
+    var configured = Model.Store.GetPaymentMethodConfig(Plugin.Pmi) is not null &&
+                     !Model.Store.GetStoreBlob().GetExcludedPaymentMethods().Match(Plugin.Pmi);
 }
-<a asp-controller="UILnurlBackend" asp-action="Settings"
-   asp-route-storeId="@storeId" class="nav-link">
-    LNURL Pay Backend
-</a>
+<li class="nav-item" permission="@Policies.CanModifyStoreSettings">
+    <a class="nav-link @(isActive ? "active" : "")"
+       asp-controller="UILnurlBackend" asp-action="Settings"
+       asp-route-storeId="@storeId">
+        <span class="me-2 btcpay-status btcpay-status--@(configured ? "enabled" : "pending")"></span>
+        <span>Momo</span>
+    </a>
+</li>

@@ -1,14 +1,15 @@
 @model BTCPayServer.Plugins.Momo.Controllers.LnurlBackendViewModel
 
 @{
-    ViewData["Title"] = "LNURL Pay Backend";
+    ViewData["Title"] = "Momo";
     Layout = "_Layout";
 }
 
 <div class="container">
     <partial name="_StatusMessage" />
 
-    <h2 class="mt-4 mb-4">LNURL Pay Backend</h2>
+    <h2 class="mt-4 mb-0">Momo</h2>
+    <p class="text-secondary mt-1 mb-4">Lightning Address (LUD-06 / LUD-21)</p>
 
     <div class="alert alert-warning" role="alert">
         This payment method does not support automatic refunds.

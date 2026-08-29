@@ -22,9 +22,10 @@ public class LnurlBackendPaymentMethodHandler : IPaymentMethodHandler
     public JsonSerializer Serializer { get; }
 
     ///<summary>
-    /// BTC-LNADDR — suffix chosen to avoid TryParse normalization into built-in BTC-LNURL.
+    /// BTC-MOMO-LNADDR — namespaced so it can never collide with core
+    /// (BTC-LNURL/BTC-LN) or other plugins. Single source: Plugin.Pmi.
     ///</summary>
-    public static readonly PaymentMethodId Pmi = new("BTC-LNADDR");
+    public static readonly PaymentMethodId Pmi = Plugin.Pmi;
 
     public LnurlBackendPaymentMethodHandler(LnurlClient lnurlClient, BTCPayNetworkProvider networkProvider)
     {

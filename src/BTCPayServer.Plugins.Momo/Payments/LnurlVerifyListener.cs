@@ -21,7 +21,7 @@ using BTCPayServer.Client.Models;
 namespace BTCPayServer.Plugins.Momo.Payments;
 
 public class LnurlVerifyListener : IHostedService {
-    private readonly PaymentMethodId _pmi = new("BTC-LNADDR");
+    private readonly PaymentMethodId _pmi = Plugin.Pmi;
     private readonly SemaphoreSlim _concurrency = new(50);
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
