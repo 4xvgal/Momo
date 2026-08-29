@@ -16,6 +16,8 @@ namespace BTCPayServer.Plugins.Momo;
 
 public class Plugin : BaseBTCPayServerPlugin
 {
+    public static readonly PaymentMethodId Pmi = new("BTC-MOMO-LNADDR");
+
     public override IBTCPayServerPlugin.PluginDependency[] Dependencies { get; } =
     {
         new IBTCPayServerPlugin.PluginDependency { Identifier = nameof(BTCPayServer), Condition = ">=2.3.9" }
@@ -45,6 +47,7 @@ public class Plugin : BaseBTCPayServerPlugin
         // assembly by the Razor SDK, so they are registered by name (not path)
         services.AddUIExtension("ln-payment-method-setup-tabhead", "LnurlLightningSetupTabHead");
         services.AddUIExtension("ln-payment-method-setup-tab", "LnurlLightningSetupTab");
-        services.AddUIExtension("store-category-nav", "NavExtension");
+        // Sidebar entry: Wallets accordion only
+        services.AddUIExtension("store-wallets-nav", "NavExtension");
     }
 }

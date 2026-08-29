@@ -22,7 +22,7 @@ public class UILnurlBackendController : Controller
     private readonly StoreRepository _storeRepository;
     private readonly LnurlClient _lnurlClient;
     private readonly ILogger<UILnurlBackendController> _logger;
-    private static readonly PaymentMethodId Pmi = new("BTC-LNADDR");
+    private static readonly PaymentMethodId Pmi = Plugin.Pmi;
 
     private StoreData? Store => HttpContext.GetStoreData();
 
