@@ -10,6 +10,9 @@ using BTCPayServer.Data;
 using BTCPayServer.Payments;
 using BTCPayServer.Payments.Lightning;
 using BTCPayServer.Plugins.Momo.Models;
+using BTCPayServer.Lightning;
+using NBitpayClient;
+using BTCPayServer.Client.Models;
 
 namespace BTCPayServer.Plugins.Momo.Payments;
 
@@ -67,7 +70,21 @@ public class LnurlBackendPaymentMethodHandler : IPaymentMethodHandler
             throw new PaymentMethodUnavailableException(
                 "LNURL-pay backend is not configured. Set a Lightning Address in store settings.");
 
-        var amountMsat = ConvertToMsat(context.InvoiceEntity.Price, context.InvoiceEntity.Currency);
+        if (context.InvoiceEntity.Type == InvoiceType.TopUp)
+            throw new PaymentMethodUnavailableException(
+                "Top-up invoices are not supported. LNURL-pay backend requires a fixed invoice amount.");
+
+        // guard for rate
+        var due = context.Prompt.Calculate().Due;
+        if (due <= 0)
+            throw new PaymentMethodUnavailableException(
+                $"Could not convert {context.InvoiceEntity.Currency} amount to BTC (rate:{context.Prompt.Rate}).");
+        var amountMsat = ConvertToMsat(due);
+
+        context.Logs.Write($"Converted {context.InvoiceEntity.Price} {context.InvoiceEntity.Currency} "
+          +
+               $"→ {due} BTC → {amountMsat} msat (rate: {context.Prompt.Rate})",
+               InvoiceEventData.EventSeverity.Info);
 
         // 1) LUD-06: GET /.well-known/lnurlp/{user}
         var payParams = await _lnurlClient.FetchLud06Params(config.LightningAddress);
@@ -115,11 +132,8 @@ public class LnurlBackendPaymentMethodHandler : IPaymentMethodHandler
     }
 
     //helpers
-    internal static long ConvertToMsat(decimal invoicePrice, string currency) {
-        if (!string.Equals(currency, "BTC", StringComparison.OrdinalIgnoreCase))
-            throw new PaymentMethodUnavailableException($"LNURL-pay backend only supports BTC. Currency {currency} is not supported");
-        return (long)(invoicePrice * Money.COIN * 1000m);
-    }
+    internal static long ConvertToMsat(decimal amountBtc)
+        => new LightMoney(amountBtc, LightMoneyUnit.BTC).MilliSatoshi;
 
     internal static void ValidateAmountRange(long amountMsat, long minSendable, long maxSendable) {
         if (amountMsat < minSendable || amountMsat > maxSendable)
